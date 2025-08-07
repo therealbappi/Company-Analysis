@@ -15,13 +15,15 @@ const computeSMA = (data, period) => {
 }
 
 const backtestSmaCrossover = (closes, shortP = 10, longP = 20) => {
-  if (!closes || closes.length === 0) return { trades: [], equityCurve: [], stats: null }
+  if (!closes || closes.length === 0) return { trades: [], closedTrades: [], equityCurve: [], stats: null }
   const short = computeSMA(closes, shortP)
   const long = computeSMA(closes, longP)
   const trades = []
+  const closedTrades = []
   const equityCurve = []
   let position = 0 // 0 none, 1 long
   let entryPrice = 0
+  let entryIndex = -1
   let equity = 1.0
 
   for (let i = 0; i < closes.length; i++) {
@@ -32,6 +34,7 @@ const backtestSmaCrossover = (closes, shortP = 10, longP = 20) => {
     if (position === 0 && s > l) {
       position = 1
       entryPrice = closes[i]
+      entryIndex = i
       trades.push({ type: 'BUY', index: i, price: closes[i] })
     } else if (position === 1 && s < l) {
       position = 0
@@ -39,6 +42,7 @@ const backtestSmaCrossover = (closes, shortP = 10, longP = 20) => {
       const ret = (exitPrice - entryPrice) / entryPrice
       equity *= 1 + ret
       trades.push({ type: 'SELL', index: i, price: exitPrice, return: ret })
+      closedTrades.push({ entryIndex, entryPrice, exitIndex: i, exitPrice, return: ret })
     }
   }
 
@@ -48,6 +52,7 @@ const backtestSmaCrossover = (closes, shortP = 10, longP = 20) => {
     const ret = (exitPrice - entryPrice) / entryPrice
     equity *= 1 + ret
     trades.push({ type: 'SELL', index: closes.length - 1, price: exitPrice, return: ret })
+    closedTrades.push({ entryIndex, entryPrice, exitIndex: closes.length - 1, exitPrice, return: ret })
   }
 
   const totalReturn = equity - 1
@@ -61,7 +66,7 @@ const backtestSmaCrossover = (closes, shortP = 10, longP = 20) => {
     avgLoss: lossTrades.length ? (lossTrades.reduce((s, t) => s + t.return, 0) / lossTrades.length) * 100 : 0
   }
 
-  return { trades, equityCurve, stats }
+  return { trades, closedTrades, equityCurve, stats }
 }
 
 const QuantStrategies = () => {
@@ -94,12 +99,13 @@ const QuantStrategies = () => {
     fetchSeries(symbol)
   }, [])
 
-  const closes = useMemo(() => {
-    if (!series?.values) return []
-    return [...series.values]
-      .reverse()
-      .map(v => parseFloat(v.close))
-      .filter(v => !isNaN(v))
+  const { closes, dates } = useMemo(() => {
+    if (!series?.values) return { closes: [], dates: [] }
+    const ordered = [...series.values].reverse()
+    const points = ordered
+      .map(v => ({ date: v.datetime, close: parseFloat(v.close) }))
+      .filter(p => !isNaN(p.close))
+    return { closes: points.map(p => p.close), dates: points.map(p => p.date) }
   }, [series])
 
   const results = useMemo(() => backtestSmaCrossover(closes, Number(shortPeriod), Number(longPeriod)), [closes, shortPeriod, longPeriod])
@@ -126,11 +132,14 @@ const QuantStrategies = () => {
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <h2 className="text-xl font-semibold text-gray-900">Quant Strategies (SMA Crossover)</h2>
         <button onClick={() => fetchSeries(symbol)} className="btn-secondary inline-flex items-center">
           <RefreshCw className="w-4 h-4 mr-2" /> Refresh
         </button>
+      </div>
+      <div className="text-xs text-gray-500 mb-4">
+        Backtest uses daily end-of-day data (~200 most recent trading days). SMA windows are in trading days.
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -207,6 +216,27 @@ const QuantStrategies = () => {
 
       {!loading && (!series || !series.values) && (
         <div className="text-gray-500">No time series data available. Try another symbol.</div>
+      )}
+
+      {!loading && results?.closedTrades?.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-medium text-gray-800 mb-2">Profitable trades (BUY ➜ SELL)</h3>
+          <div className="space-y-2">
+            {results.closedTrades.filter(t => t.return > 0).map((t, idx) => (
+              <div key={`${t.entryIndex}-${t.exitIndex}-${idx}`} className="flex items-center justify-between p-3 border rounded-lg">
+                <div>
+                  <div className="text-sm text-gray-700">
+                    Buy {dates[t.entryIndex]} @ ${t.entryPrice.toFixed(2)} ➜ Sell {dates[t.exitIndex]} @ ${t.exitPrice.toFixed(2)}
+                  </div>
+                </div>
+                <div className="text-sm font-semibold text-success-600">{(t.return * 100).toFixed(2)}%</div>
+              </div>
+            ))}
+            {results.closedTrades.filter(t => t.return > 0).length === 0 && (
+              <div className="text-xs text-gray-500">No profitable trades for the selected parameters.</div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
