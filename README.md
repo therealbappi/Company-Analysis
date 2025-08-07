@@ -14,6 +14,7 @@ A comprehensive web application for analyzing stocks with real-time data, financ
 - **Automatic Company Profiles**: Comprehensive company information automatically fetched
 - **Popular Stocks**: Quick access to major companies with detailed profiles
 - **Enhanced UI**: Modern design with Tailwind CSS and Lucide icons
+ - **Quant Strategies (New)**: Simple backtesting tab with SMA crossover and optimized suggestions
 
 ## Tech Stack
 
@@ -72,7 +73,28 @@ A comprehensive web application for analyzing stocks with real-time data, financ
    - **Overview**: Real-time price, chart, key metrics, and company profile
    - **Financials**: Income statements, balance sheets, and ratios
    - **News**: Latest company and market news
+   - **Quant Strategies (New)**: Run a simple SMA crossover backtest and see top parameter suggestions
 5. **Track your searches**: View your search history with enhanced company details
+
+### Quant Strategies Tab (New)
+
+The Quant Strategies tab adds a simple backtesting sandbox to quickly evaluate a classic moving-average crossover strategy.
+
+- **Strategy**: Long entry when Short SMA crosses above Long SMA; exit when Short SMA crosses below Long SMA.
+- **Inputs**:
+  - **Symbol**: Defaults to the currently viewed stock or `AAPL`.
+  - **Short SMA** and **Long SMA**: Choose lookback windows (e.g., 10 / 20).
+- **Outputs**:
+  - **Total Return**: Compounded return from the sequence of trades.
+  - **Trades**: Number of closed trades.
+  - **Win Rate**: % of profitable closed trades.
+  - **Avg Win / Avg Loss**: Average gain/loss per winning/losing trade.
+- **Suggestions**: The app runs a small grid search of SMA pairs and lists the top 5 by total return. Click a suggestion to apply those parameters instantly.
+
+Notes and limitations:
+- This is an educational tool, not investment advice.
+- Uses end-of-day daily data; returns ignore transaction costs, slippage, and dividends.
+- For sufficient accuracy, ensure there are enough history points relative to the chosen SMA windows.
 
 ## API Endpoints Used
 
@@ -88,6 +110,17 @@ The application uses the following TwelveData API endpoints:
 - `/news` - Company news
 - `/symbol_search` - Stock symbol search
 
+### Fallback Data Sources
+
+If the TwelveData demo key is used (which often only returns AAPL for real-time quotes), the app automatically tries public fallback sources for broader coverage:
+
+- **Quotes (Fallback)**: Stooq JSON quote feed
+  - `https://stooq.com/q/l/?s={symbol}.us&f=sd2t2ohlcv&h&e=json`
+- **Time Series (Fallback)**: Stooq daily CSV
+  - `https://stooq.com/q/d/l/?s={symbol}.us&i=d`
+
+Returned data are normalized to match the app’s expected shape where possible.
+
 ## Project Structure
 
 ```
@@ -101,6 +134,7 @@ src/
 │   ├── FinancialMetrics.jsx # Financial statements and ratios
 │   ├── NewsSection.jsx # Latest news display
 │   ├── CompanyProfile.jsx # Enhanced company profile component
+ │   ├── QuantStrategies.jsx # Quant Strategies tab with SMA crossover backtest and suggestions
 │   └── LoadingSpinner.jsx # Loading indicator
 ├── context/            # React context
 │   └── StockContext.jsx # Global state management
@@ -173,6 +207,7 @@ Some companies might not have complete data available due to:
 - Check if the company is publicly traded on major exchanges
 - Verify the stock symbol is correct
 - Consider upgrading to a paid API plan for more comprehensive data
+ - When using the demo key, rely on the built-in Stooq fallbacks for broader symbol coverage
 
 ## Key Features in Detail
 
@@ -218,3 +253,4 @@ Some companies might not have complete data available due to:
 - [ ] Real-time price updates
 - [ ] Social sentiment analysis
 - [ ] Earnings calendar integration 
+ - [ ] Additional strategies (RSI, MACD, Bollinger Bands) and walk-forward analysis
