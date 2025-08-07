@@ -20,16 +20,19 @@ const StockDashboard = () => {
     const fetchStockData = async () => {
       if (!symbol) return
 
+      // Normalize symbol from the route, in case it came with exchange suffixes somewhere else
+      const normalizedSymbol = String(symbol).split(':')[0].toUpperCase()
+
       dispatch({ type: 'SET_LOADING', payload: true })
       dispatch({ type: 'CLEAR_ERROR' })
 
       try {
         // Fetch all data in parallel with better error handling
         const [quote, profile, timeSeries, news] = await Promise.allSettled([
-          stockAPI.getQuote(symbol),
-          stockAPI.getProfile(symbol),
-          stockAPI.getTimeSeries(symbol),
-          stockAPI.getNews(symbol)
+          stockAPI.getQuote(normalizedSymbol),
+          stockAPI.getProfile(normalizedSymbol),
+          stockAPI.getTimeSeries(normalizedSymbol),
+          stockAPI.getNews(normalizedSymbol)
         ])
 
         console.log(`Data fetch results for ${symbol}:`, {
@@ -53,14 +56,14 @@ const StockDashboard = () => {
         if (!stockData.news) console.warn(`No news data for ${symbol}`)
 
         dispatch({ type: 'SET_STOCK_DATA', payload: stockData })
-        dispatch({ type: 'SET_CURRENT_STOCK', payload: { symbol, ...stockData } })
+        dispatch({ type: 'SET_CURRENT_STOCK', payload: { symbol: normalizedSymbol, ...stockData } })
 
         // Add to search history with enhanced profile data
         if (stockData.profile) {
           dispatch({
             type: 'ADD_TO_HISTORY',
             payload: {
-              symbol,
+               symbol: normalizedSymbol,
               name: stockData.profile.name,
               description: stockData.profile.description,
               sector: stockData.profile.sector,
@@ -131,7 +134,7 @@ const StockDashboard = () => {
         
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{symbol}</h1>
+             <h1 className="text-3xl font-bold text-gray-900">{String(symbol).split(':')[0].toUpperCase()}</h1>
             {profile && (
               <p className="text-gray-600 mt-1">{profile.name}</p>
             )}

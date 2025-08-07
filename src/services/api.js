@@ -52,6 +52,50 @@ export const stockAPI = {
       return response
     } catch (error) {
       console.error(`Failed to fetch quote for ${symbol}:`, error.message)
+
+      // Fallback: If using demo key (which typically works only for AAPL), try a public source (Stooq)
+      try {
+        if ((import.meta.env.VITE_TWELVEDATA_API_KEY || 'demo') === 'demo') {
+          const fallbackSymbol = `${symbol}`.toLowerCase() + '.us'
+          const fallbackUrl = `https://stooq.com/q/l/?s=${fallbackSymbol}&f=sd2t2ohlcv&h&e=json`
+          const fallbackResp = await axios.get(fallbackUrl, { timeout: 8000 })
+          const item = fallbackResp?.data?.symbols?.[0]
+          if (!item || item?.close === 'N/D') {
+            return null
+          }
+
+          const toNum = (v) => {
+            const n = parseFloat(v)
+            return isNaN(n) ? null : n
+          }
+
+          const open = toNum(item.open)
+          const close = toNum(item.close)
+          const change = open != null && close != null ? close - open : null
+          const percentChange = change != null && open ? (change / open) * 100 : null
+
+          const normalized = {
+            symbol: symbol.toUpperCase(),
+            name: item.name || symbol.toUpperCase(),
+            open,
+            high: toNum(item.high),
+            low: toNum(item.low),
+            close,
+            previous_close: null,
+            change,
+            percent_change: percentChange,
+            volume: item.volume ? parseInt(item.volume, 10) : null,
+            is_market_open: null,
+            timestamp: item.date && item.time ? `${item.date} ${item.time}` : null
+          }
+
+          console.log(`Quote data (fallback) for ${symbol}:`, normalized)
+          return normalized
+        }
+      } catch (fallbackError) {
+        console.error(`Fallback quote fetch failed for ${symbol}:`, fallbackError?.message || fallbackError)
+      }
+
       return null
     }
   },
@@ -70,6 +114,42 @@ export const stockAPI = {
       return response
     } catch (error) {
       console.error(`Failed to fetch time series for ${symbol}:`, error.message)
+
+      // Fallback to Stooq CSV when using demo key
+      try {
+        if ((import.meta.env.VITE_TWELVEDATA_API_KEY || 'demo') === 'demo' && interval === '1day') {
+          const fallbackSymbol = `${symbol}`.toLowerCase() + '.us'
+          const csvUrl = `https://stooq.com/q/d/l/?s=${fallbackSymbol}&i=d`
+          const csvResp = await axios.get(csvUrl, { timeout: 8000 })
+          const csv = csvResp?.data
+          if (!csv || typeof csv !== 'string') return null
+
+          const lines = csv.trim().split(/\r?\n/)
+          const header = lines.shift()
+          if (!header || !/date,open,high,low,close,volume/i.test(header)) return null
+
+          const values = lines
+            .map((line) => line.split(','))
+            .filter((cols) => cols.length >= 6 && cols[1] !== 'N/A')
+            .map((cols) => ({
+              datetime: cols[0],
+              open: cols[1],
+              high: cols[2],
+              low: cols[3],
+              close: cols[4],
+              volume: cols[5]
+            }))
+
+          if (!values.length) return null
+
+          const normalized = { values }
+          console.log(`Time series data (fallback) for ${symbol}:`, normalized)
+          return normalized
+        }
+      } catch (fallbackError) {
+        console.error(`Fallback time series fetch failed for ${symbol}:`, fallbackError?.message || fallbackError)
+      }
+
       return null
     }
   },
